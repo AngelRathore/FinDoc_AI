@@ -1,0 +1,82 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #fafafa;
+  --surface:   #ffffff;
+  --surface2:  #f4f4f5;
+  --border:    #e4e4e7;
+  --accent:    #16a34a;
+  --accent2:   #ca8a04;
+  --accent3:   #2563eb;
+  --danger:    #dc2626;
+  --text:      #09090b;
+  --text-dim:  #71717a;
+  --text-muted:#a1a1aa;
+  --radius:    14px;
+  --radius-sm: 9px;
+}
+
+html, body, #root {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* markdown in chat */
+.md-content h1,.md-content h2,.md-content h3 {
+  font-family: 'Syne', sans-serif;
+  color: var(--accent);
+  margin: 0.75rem 0 0.35rem;
+  line-height: 1.2;
+}
+.md-content h1 { font-size: 1.2rem; }
+.md-content h2 { font-size: 1.05rem; }
+.md-content h3 { font-size: 0.95rem; }
+.md-content p  { margin-bottom: 0.5rem; }
+.md-content ul,.md-content ol { padding-left: 1.2rem; margin-bottom: 0.5rem; }
+.md-content li { margin-bottom: 0.2rem; }
+.md-content strong { color: var(--accent2); font-weight: 600; }
+.md-content code {
+  background: rgba(10,110,92,0.08);
+  border: 1px solid rgba(10,110,92,0.15);
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.85em;
+  color: var(--accent);
+}
+.md-content pre {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  margin-bottom: 0.5rem;
+}
+.md-content pre code { background: none; border: none; padding: 0; }
+
+/* animations */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulse {
+  0%,100% { opacity: 0.4; }
+  50%      { opacity: 1; }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
