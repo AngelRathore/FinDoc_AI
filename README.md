@@ -132,7 +132,7 @@ uvicorn main:app --reload
 
 Uploads and URLs return HTTP 202 with document/job IDs and a status URL. Poll `GET /api/v1/ingestion-jobs/{job_id}`; document status is available from `GET /api/v1/documents/{document_id}`. Failed jobs expose a sanitized message and can be retried with `POST /api/v1/ingestion-jobs/{job_id}/retry`. One job row is retained per document and deleted with its document; manual retry reuses the row and resets `attempt_count` for the new retry cycle, so prior attempt history is not retained. Redis is a dispatch transport, while PostgreSQL remains the source of truth. The job row acts as an outbox; a beat task retries undispatched rows. Redis and PostgreSQL do not share an atomic transaction, so dispatch can be duplicated after a crash; the worker is idempotent and validates the persisted task ID.
 
-The worker parses/chunks documents, builds temporary FAISS and BM25 indexes to validate generated vectors, then atomically stores chunk/vector artifacts before marking the document complete. Each API process refreshes its own in-memory FAISS/BM25 indexes from completed artifact files. This requires worker and API to use the same local document directory. Deletion marks the document `deleting` before file/artifact cleanup, so retrieval excludes it while a worker is running. A single local Celery worker with embedded beat is intended for development; use one beat scheduler only.
+The worker parses/chunks documents, builds temporary FAISS and BM25 indexes to validate generated vectors, then atomically stores chunk/vector artifacts before marking the document complete. Each API process refreshes its own in-memory FAISS/BM25 indexes from completed artifact files. This requires worker and API to use the same local document directory. Deletion marks the document `deleting` before file/artifact cleanup, so retrieval excludes it while a worker is running. For local macOS development, run one worker with `--pool=solo` and one separate Beat process using the documented scheduler command.
 
 For URL ingestion, the raw URL is stored in a mode-`0600` local `.url` file; the database/source label omits query strings and fragments, and URLs containing userinfo are rejected. The worker resolves DNS, rejects any non-public result, pins the HTTP request to the checked IP, preserves TLS hostname verification/SNI, restricts ports to 80/443, disables redirects, caps response size, and applies connect/read/overall time limits. This reduces DNS-rebinding risk in the application fetch path. It cannot replace network egress controls: resolver behavior, proxy/network configuration, and future transport changes remain trust boundaries. URL ingestion should be limited to trusted use until network-level egress restrictions exist.
 
@@ -183,7 +183,7 @@ celery -A celery_app.celery_app inspect ping
 test -w "${DOCUMENT_STORAGE_DIR:-storage/documents}" && echo "storage writable"
 ```
 
-`/health` checks API liveness; `/ready` checks PostgreSQL. Redis is optional to API readiness because PostgreSQL outbox rows remain authoritative and can be dispatched when Redis returns. A worker and API process must share `DOCUMENT_STORAGE_DIR`. A single embedded beat scheduler should run. `inspect ping` requires a running worker.
+`/health` checks API liveness; `/ready` checks PostgreSQL. Redis is optional to API readiness because PostgreSQL outbox rows remain authoritative and can be dispatched when Redis returns. A worker and API process must share `DOCUMENT_STORAGE_DIR`. Run exactly one Beat scheduler process. `inspect ping` requires a running worker.
 
 ### Tests and deterministic retrieval evaluation
 
@@ -200,7 +200,7 @@ python evaluate.py --dataset evaluation/financial_qa.json -k 5
 
 ### Live-service integration verification (opt-in)
 
-The ordinary suite uses isolated SQLite databases, fake embeddings/rerankers/LLM, and mocked network calls. To verify PostgreSQL, Redis and Celery locally, configure a dedicated disposable test database in a separate shell environment, start Redis and one Celery worker, then run the API. Check `/ready`, `python -m alembic current`, `redis-cli ping`, and `celery -A celery_app.celery_app inspect ping`. Register two test users, upload a synthetic TXT/PDF as user A, poll its job endpoint until completed, ask a question and inspect persisted conversation/citation history, then verify user B receives 404 for A's document/conversation. Delete A's test document and confirm its citation is marked unavailable and it is excluded from a later question. Retry a deliberately malformed test upload only after confirming the sanitized failed state. Remove only those test records after verification. Do not point the procedure at a database containing valuable data.
+The ordinary suite uses isolated SQLite databases, fake embeddings/rerankers/LLM, and mocked network calls. To verify PostgreSQL, Redis and Celery locally, configure a dedicated disposable test database in a separate shell environment, start Redis, one Celery worker, and one Beat process, then run the API. Check `/ready`, `python -m alembic current`, `redis-cli ping`, and `celery -A celery_app:celery_app inspect ping`. Register two test users, upload a synthetic TXT/PDF as user A, poll its job endpoint until completed, ask a question and inspect persisted conversation/citation history, then verify user B receives 404 for A's document/conversation. Delete A's test document and confirm its citation is marked unavailable and it is excluded from a later question. Retry a deliberately malformed test upload only after confirming the sanitized failed state. Remove only those test records after verification. Do not point the procedure at a database containing valuable data.
 
 Before a local PostgreSQL upgrade, create a custom-format backup with `pg_dump -Fc -f findocai-before-phase6.dump DATABASE_NAME` and restore-test it into a separate database with `pg_restore -d findocai_restore_test findocai-before-phase6.dump`. Protect backup files because they contain account and application data. Uploaded files and `.indexes` artifacts need a separate filesystem backup under `DOCUMENT_STORAGE_DIR`; a database dump alone cannot restore documents.
 
@@ -213,3 +213,7 @@ Before a local PostgreSQL upgrade, create a custom-format backup with `pg_dump -
 - URL fetch restrictions and app-side IP pinning reduce SSRF exposure but do not replace outbound firewall/egress controls.
 - The deterministic benchmark does not validate live Groq facts or real cross-encoder score calibration. Tune `FINDOC_RERANK_THRESHOLD` against a larger manually judged finance corpus before relying on abstention rates.
 - No live PostgreSQL/Redis/Celery/Groq integration checks were run as part of local unit verification, and the migration remains unapplied until you run it manually.
+
+## Author
+
+Angel Rathore — Computer Science undergraduate focused on AI, machine learning, and backend development.
