@@ -1,0 +1,21 @@
+{
+  "documents": [
+    {"id":"rev24","owner":"a","source":"annual.pdf","page":10,"text":"Revenue was $125 million in fiscal 2024, compared with $100 million in fiscal 2023, an increase of 25 percent."},
+    {"id":"margin24","owner":"a","source":"annual.pdf","page":11,"text":"Operating margin improved to 18 percent in fiscal 2024 from 16 percent in fiscal 2023."},
+    {"id":"income24","owner":"a","source":"annual.pdf","page":12,"text":"Net income for fiscal 2024 was $18.5 million, while diluted earnings per share were $2.14."},
+    {"id":"table_assets","owner":"a","source":"annual.pdf","page":14,"text":"Table 7. Liquidity ($ millions): Cash and equivalents 42; current assets 310; current liabilities 125."},
+    {"id":"figure_capex","owner":"a","source":"annual.pdf","page":18,"text":"Figure 3 shows capital expenditures totaling $12.4 million in fiscal 2024, primarily for manufacturing equipment."},
+    {"id":"other_user","owner":"b","source":"private.pdf","page":1,"text":"Confidential Aurora competitor revenue was $999 million in 2024."},
+    {"id":"deleted","owner":"a","source":"removed.pdf","page":1,"text":"The discontinued product was code named ZEPHYRZX."}
+  ],
+  "cases": [
+    {"question":"What was fiscal 2024 revenue and year over year growth?","standalone":"What was fiscal 2024 revenue and year over year growth?","owner":"a","relevant":["rev24"],"expected":"$125 million","answerable":true},
+    {"question":"What about its margin that year?","standalone":"What was the fiscal 2024 operating margin?","owner":"a","relevant":["margin24"],"expected":"18 percent","answerable":true},
+    {"question":"What were net income and diluted EPS?","standalone":"What were fiscal 2024 net income and diluted earnings per share?","owner":"a","relevant":["income24"],"expected":"$18.5 million","answerable":true},
+    {"question":"From the liquidity table, what was cash and current assets?","standalone":"From the liquidity table, what were cash and current assets?","owner":"a","relevant":["table_assets"],"expected":"42; current assets 310","answerable":true},
+    {"question":"What does the capex figure report?","standalone":"What does the fiscal 2024 capital expenditure figure report?","owner":"a","relevant":["figure_capex"],"expected":"$12.4 million","answerable":true},
+    {"question":"What was Aurora competitor revenue?","standalone":"What was Aurora competitor revenue?","owner":"a","relevant":[],"expected":null,"answerable":false},
+    {"question":"What was the deleted product code name?","standalone":"What was the deleted product code name?","owner":"a","relevant":[],"exclude":["deleted"],"expected":null,"answerable":false},
+    {"question":"What was fiscal 2024 revenue?","standalone":"What was fiscal 2024 revenue?","owner":"b","relevant":["other_user"],"expected":"$999 million","answerable":true}
+  ]
+}

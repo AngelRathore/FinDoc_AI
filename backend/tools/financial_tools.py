@@ -4,24 +4,13 @@ Financial tools used by the LangGraph agent.
 import math
 import re
 from langchain.tools import tool
-import state
 
 
 # ── Tool 1: Vector store retrieval ────────────────────────────────────────────
 @tool
 def search_documents(query: str) -> str:
-    """Search the loaded financial documents for relevant information."""
-    vs = state.get_vectorstore()
-    if vs is None:
-        return "No documents loaded. Please ingest financial documents first."
-    docs = vs.similarity_search(query, k=3)
-    if not docs:
-        return "No relevant information found in loaded documents."
-    results = []
-    for i, doc in enumerate(docs, 1):
-        src = doc.metadata.get("source", "unknown")
-        results.append(f"[Source {i}: {src}]\n{doc.page_content[:600]}")
-    return "\n\n---\n\n".join(results)
+    """Disabled legacy agent tool; document retrieval requires an authenticated owner scope."""
+    return "Use the authenticated document chat endpoint to search private documents."
 
 
 # ── Tool 2: DuckDuckGo web search ─────────────────────────────────────────────

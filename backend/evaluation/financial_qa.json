@@ -1,0 +1,16 @@
+{
+  "documents": [
+    {"id": "revenue_2024", "source": "sample_annual_report.pdf", "page": 10, "text": "Revenue was $125 million in fiscal 2024, compared with $100 million in fiscal 2023, an increase of 25%."},
+    {"id": "margin_2024", "source": "sample_annual_report.pdf", "page": 11, "text": "Operating margin improved to 18% in fiscal 2024 from 16% in fiscal 2023."},
+    {"id": "net_income", "source": "sample_annual_report.pdf", "page": 12, "text": "Net income for fiscal 2024 was $18.5 million, while diluted earnings per share were $2.14."},
+    {"id": "assets", "source": "sample_annual_report.pdf", "page": 14, "text": "At year end, cash and cash equivalents were $42 million and total current assets were $310 million."},
+    {"id": "capex", "source": "sample_annual_report.pdf", "page": 18, "text": "Capital expenditures totaled $12.4 million in fiscal 2024, primarily for manufacturing equipment."},
+    {"id": "dividend", "source": "sample_annual_report.pdf", "page": 21, "text": "The company declared a quarterly dividend of $0.35 per common share during fiscal 2024."}
+  ],
+  "queries": [
+    {"question": "What was fiscal 2024 revenue and its year-over-year growth?", "relevant_ids": ["revenue_2024"]},
+    {"question": "Compare operating margins in 2023 and 2024.", "relevant_ids": ["margin_2024"]},
+    {"question": "Give the 2024 net income and diluted EPS.", "relevant_ids": ["net_income"]},
+    {"question": "Summarize 2024 revenue and operating margin.", "relevant_ids": ["revenue_2024", "margin_2024"]}
+  ]
+}

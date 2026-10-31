@@ -26,7 +26,7 @@ from tools.financial_tools import (
 # ── LLM ───────────────────────────────────────────────────────────────────────
 def get_agent_llm():
     return ChatGroq(
-        model_name="llama-3.1-8b-instant",
+        model_name=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"),
         groq_api_key=os.getenv("GROQ_API_KEY"),
         temperature=0.3,
         max_tokens=1200,
@@ -116,7 +116,7 @@ def generate_node(state: AgentState) -> AgentState:
     from langchain_groq import ChatGroq
 
     llm = ChatGroq(
-        model_name="llama-3.1-8b-instant",
+        model_name=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"),
         groq_api_key=os.getenv("GROQ_API_KEY"),
         temperature=0.5,
         max_tokens=1200,

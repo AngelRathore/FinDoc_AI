@@ -11,6 +11,7 @@ export default function ChatPanel({ messages, loading, onSend, mode }) {
   }, [messages, loading])
 
   const handleKey = (e) => {
+    if (loading) return
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       const val = inputRef.current.value.trim()
@@ -19,6 +20,7 @@ export default function ChatPanel({ messages, loading, onSend, mode }) {
   }
 
   const handleSend = () => {
+    if (loading) return
     const val = inputRef.current.value.trim()
     if (val) { onSend(val); inputRef.current.value = '' }
   }
@@ -97,11 +99,14 @@ export default function ChatPanel({ messages, loading, onSend, mode }) {
               {msg.sources?.length > 0 && (
                 <div style={styles.sourcesBox}>
                   <span style={styles.sourcesLabel}>Sources</span>
-                  {msg.sources.map((s, si) => (
-                    <a key={si} href={s.startsWith('http') ? s : '#'} target="_blank" rel="noreferrer" style={styles.sourceLink}>
-                      <ExternalLink size={10}/> {s.length > 55 ? s.slice(0, 53) + '…' : s}
-                    </a>
-                  ))}
+                  {msg.sources.map((source, si) => {
+                    const text = typeof source === 'string' ? source : source.text
+                    const available = typeof source === 'string' || source.available !== false
+                    const truncated = text.length > 55 ? text.slice(0, 53) + '…' : text
+                    return available && text.startsWith('http')
+                      ? <a key={si} href={text} target="_blank" rel="noreferrer" style={styles.sourceLink}><ExternalLink size={10}/> {truncated}</a>
+                      : <span key={si} style={styles.sourceLink}>{!available ? 'Unavailable · ' : ''}{truncated}</span>
+                  })}
                 </div>
               )}
             </div>
@@ -136,8 +141,8 @@ export default function ChatPanel({ messages, loading, onSend, mode }) {
           onKeyDown={handleKey}
           rows={1}
         />
-        <button style={styles.sendBtn} onClick={handleSend}>
-          <Send size={16}/>
+        <button style={styles.sendBtn} onClick={handleSend} disabled={loading} aria-label="Send message">
+          {loading ? <Loader size={16} className="spin"/> : <Send size={16}/>}
         </button>
       </div>
 

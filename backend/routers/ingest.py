@@ -1,154 +1,116 @@
-import os
-import tempfile
-from typing import Optional
+"""Compatibility ingestion routes backed by owned, persistent document records."""
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+from urllib.parse import urlsplit
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-
-from langchain_community.document_loaders import (
-    WebBaseLoader,
-    PyPDFLoader,
-    
-    TextLoader,
-)
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceEmbeddings
-
-import state
+from core.dependencies import get_current_user, require_roles
+from db.session import get_db
+from models.document import DocumentRecord, DocumentStatus
+from models.user import User, UserRole
+from schemas.ingest import URLPayload
+from services.documents import clear_all_documents, queue_upload_document, queue_url_document
 
 router = APIRouter()
 
 
-def get_embeddings():
-    return HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2",
-        model_kwargs={"device": "cpu"},
-        encode_kwargs={"normalize_embeddings": True},
-    )
-
-
-def build_vectorstore(docs: list, sources: list[str]):
-    # Clear old state first
-    state.clear_state()
-    
-    splitter = RecursiveCharacterTextSplitter(
-        separators=["\n\n", "\n", ". ", " "],
-        chunk_size=1000,
-        chunk_overlap=150,
-    )
-    chunks = splitter.split_documents(docs)
-    embeddings = get_embeddings()
-    vs = FAISS.from_documents(chunks, embeddings)
-    state.set_vectorstore(vs, sources)
-    return len(chunks)
-
-
-# ── URL ingestion ──────────────────────────────────────────────────────────────
-class URLPayload(BaseModel):
-    urls: list[str]
-
-
-@router.post("/urls")
-async def ingest_urls(payload: URLPayload):
-    docs = []
-    failed = []
+@router.post("/urls", status_code=202)
+async def ingest_urls(
+    payload: URLPayload,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    succeeded, failed = [], []
     for url in payload.urls:
+        parsed = urlsplit(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            failed.append({"url": url, "error": "Only valid HTTP(S) URLs are supported"})
+            continue
         try:
-            loader = WebBaseLoader([url])
-            loader.requests_kwargs = {"timeout": 15}
-            docs.extend(loader.load())
-        except Exception as e:
-            failed.append({"url": url, "error": str(e)})
-
-    if not docs:
-        raise HTTPException(status_code=400, detail="No content extracted from URLs")
-
-    chunks = build_vectorstore(docs, payload.urls)
+            record, job = queue_url_document(db, current_user.id, url)
+            succeeded.append((record, job))
+        except HTTPException as exc:
+            failed.append({"url": url, "error": exc.detail})
+    if not succeeded:
+        raise HTTPException(status_code=400, detail="No valid URLs were queued")
     return {
-        "status": "success",
-        "chunks": chunks,
-        "sources": payload.urls,
+        "status": "queued",
+        "chunks": 0,
+        "sources": [record.original_filename for record, _ in succeeded],
+        "jobs": [
+            {"document_id": str(record.id), "job_id": str(job.id),
+             "status": job.status, "status_url": f"/api/v1/ingestion-jobs/{job.id}"}
+            for record, job in succeeded
+        ],
         "failed": failed,
     }
 
 
-
-
-# ── PDF ingestion ──────────────────────────────────────────────────────────────
-@router.post("/pdf")
-async def ingest_pdf(files: list[UploadFile] = File(...)):
-    docs = []
-    labels = []
-    failed = []
-    for f in files:
+async def _ingest_legacy_files(files: list[UploadFile], user: User, db: Session):
+    succeeded, failed = [], []
+    for upload in files:
         try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                content = await f.read()
-                tmp.write(content)
-                tmp_path = tmp.name
-            
-            # Load AFTER file is closed and written
-            loader = PyPDFLoader(tmp_path)
-            loaded = loader.load()
-            
-            # Add filename as metadata source
-            for doc in loaded:
-                doc.metadata["source"] = f.filename
-            
-            docs.extend(loaded)
-            labels.append(f"PDF: {f.filename}")
-            os.unlink(tmp_path)
-        except Exception as e:
-            failed.append({"file": f.filename, "error": str(e)})
-
-    if not docs:
-        raise HTTPException(status_code=400, detail="No content extracted from PDFs")
-
-    chunks = build_vectorstore(docs, labels)
-    return {"status": "success", "chunks": chunks, "sources": labels, "failed": failed}
-
-
-# ── TXT ingestion ──────────────────────────────────────────────────────────────
-@router.post("/txt")
-async def ingest_txt(files: list[UploadFile] = File(...)):
-    docs = []
-    labels = []
-    failed = []
-    for f in files:
-        try:
-            with tempfile.NamedTemporaryFile(
-                delete=False, suffix=".txt", mode="wb"
-            ) as tmp:
-                tmp.write(await f.read())
-                tmp_path = tmp.name
-            loader = TextLoader(tmp_path, encoding="utf-8")
-            docs.extend(loader.load())
-            labels.append(f"TXT: {f.filename}")
-            os.unlink(tmp_path)
-        except Exception as e:
-            failed.append({"file": f.filename, "error": str(e)})
-
-    if not docs:
-        raise HTTPException(status_code=400, detail="No content extracted from TXT files")
-
-    chunks = build_vectorstore(docs, labels)
-    return {"status": "success", "chunks": chunks, "sources": labels, "failed": failed}
-
-
-# ── Status ─────────────────────────────────────────────────────────────────────
-@router.get("/status")
-def ingest_status():
-    vs = state.get_vectorstore()
+            record, job = await queue_upload_document(db, user.id, upload)
+            succeeded.append((record, job))
+        except HTTPException as exc:
+            failed.append({"file": upload.filename or "upload", "error": exc.detail})
+    if not succeeded:
+        raise HTTPException(status_code=400, detail="No content extracted from uploaded files")
     return {
-        "ready": vs is not None,
-        "sources": state.get_sources(),
-        "source_count": len(state.get_sources()),
+        "status": "queued",
+        "chunks": 0,
+        "sources": [record.original_filename for record, _ in succeeded],
+        "jobs": [
+            {"document_id": str(record.id), "job_id": str(job.id),
+             "status": job.status, "status_url": f"/api/v1/ingestion-jobs/{job.id}"}
+            for record, job in succeeded
+        ],
+        "failed": failed,
+    }
+
+
+@router.post("/pdf", status_code=202)
+async def ingest_pdf(
+    files: list[UploadFile] = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if any((upload.filename or "").lower().endswith(".pdf") is False for upload in files):
+        raise HTTPException(status_code=415, detail="Only PDF files are supported on this route")
+    return await _ingest_legacy_files(files, current_user, db)
+
+
+@router.post("/txt", status_code=202)
+async def ingest_txt(
+    files: list[UploadFile] = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if any((upload.filename or "").lower().endswith(".txt") is False for upload in files):
+        raise HTTPException(status_code=415, detail="Only TXT files are supported on this route")
+    return await _ingest_legacy_files(files, current_user, db)
+
+
+@router.get("/status")
+def ingest_status(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    records = list(db.scalars(select(DocumentRecord).where(
+        DocumentRecord.owner_id == current_user.id,
+        DocumentRecord.status == DocumentStatus.COMPLETED.value,
+    ).order_by(DocumentRecord.created_at, DocumentRecord.id)).all())
+    return {
+        "ready": bool(records),
+        "sources": [record.original_filename for record in records],
+        "source_count": len(records),
     }
 
 
 @router.delete("/clear")
-def clear_ingest():
-    state.clear_state()
-    return {"status": "cleared"}
+def clear_ingest(
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    cleared = clear_all_documents(db)
+    return {"status": "cleared", "documents": cleared}
