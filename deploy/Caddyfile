@@ -1,0 +1,40 @@
+{$SITE_ADDRESS:localhost} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	# Set ALLOW_SIGNUPS=false to stop strangers creating accounts and spending
+	# your Groq quota. Existing accounts keep working.
+	@signups_closed {
+		path /api/auth/register /api/v1/auth/register
+		expression {env.ALLOW_SIGNUPS} == "false"
+	}
+	handle @signups_closed {
+		header Content-Type application/json
+		respond `{"detail":"Sign-ups are closed on this server"}` 403
+	}
+
+	@backend path /api/* /health /ready
+	handle @backend {
+		request_body {
+			max_size 100MB
+		}
+		reverse_proxy api:8000
+	}
+
+	handle {
+		root * /srv
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@pages not path /assets/*
+		header @pages Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}

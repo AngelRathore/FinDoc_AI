@@ -1,0 +1,107 @@
+# The whole app on one server. Only Caddy (ports 80/443) is reachable from outside.
+name: findoc
+
+x-backend: &backend
+  image: findoc-backend
+  restart: unless-stopped
+  environment: &backend-env
+    ENVIRONMENT: production
+    DATABASE_URL: postgresql+psycopg://findoc:${POSTGRES_PASSWORD:?run deploy/setup.sh first}@postgres:5432/findoc
+    GROQ_API_KEY: ${GROQ_API_KEY:?run deploy/setup.sh first}
+    GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
+    JWT_SECRET_KEY: ${JWT_SECRET_KEY:?run deploy/setup.sh first}
+    AUTH_COOKIE_SECURE: "true"
+    CORS_ORIGINS: '["https://${SITE_ADDRESS:-localhost}"]'
+    FINDOC_RERANK_THRESHOLD: ${FINDOC_RERANK_THRESHOLD:-0.0}
+    DOCUMENT_STORAGE_DIR: /data/documents
+    CELERY_BROKER_URL: redis://redis:6379/0
+    CELERY_RESULT_BACKEND: redis://redis:6379/1
+  volumes:
+    - documents:/data/documents
+  logging: &logging
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=40"]
+    environment:
+      POSTGRES_USER: findoc
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run deploy/setup.sh first}
+      POSTGRES_DB: findoc
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U findoc -d findoc"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *logging
+
+  # PostgreSQL is the durable job queue; Redis only carries wake-ups, so it keeps
+  # nothing on disk.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "noeviction"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *logging
+
+  # Runs once per start and applies any new database migrations.
+  migrate:
+    <<: *backend
+    build: ../backend
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  api:
+    <<: *backend
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=4)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+
+  # -B runs the Beat scheduler inside the worker. That is safe because there is
+  # exactly one worker, and it saves the memory a separate Beat process would need.
+  worker:
+    <<: *backend
+    command: ["celery", "-A", "celery_app:celery_app", "worker", "-B", "--concurrency=1", "--schedule=/tmp/celerybeat-schedule", "--loglevel=INFO"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+
+  web:
+    image: findoc-web
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+      ALLOW_SIGNUPS: ${ALLOW_SIGNUPS:-true}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy:/data
+    depends_on:
+      - api
+    logging: *logging
+
+volumes:
+  postgres:
+  documents:
+  caddy:

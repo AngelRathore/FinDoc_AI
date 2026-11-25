@@ -214,6 +214,22 @@ Before a local PostgreSQL upgrade, create a custom-format backup with `pg_dump -
 - The deterministic benchmark does not validate live Groq facts or real cross-encoder score calibration. Tune `FINDOC_RERANK_THRESHOLD` against a larger manually judged finance corpus before relying on abstention rates.
 - No live PostgreSQL/Redis/Celery/Groq integration checks were run as part of local unit verification, and the migration remains unapplied until you run it manually.
 
+## Deploy to AWS
+
+The `deploy/` folder runs the whole app (PostgreSQL, Redis, API, worker, and the React frontend with HTTPS) on one small EC2 server with Docker Compose.
+
+1. Create the server by uploading `deploy/aws-stack.yaml` to CloudFormation.
+2. Point a hostname (for example a free DuckDNS name) at the `ServerIp` output.
+3. From the project root on Windows, deploy. Run the same command again for every update:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy\deploy.ps1 -Server SERVER_IP -Key "$HOME\Downloads\findoc-key.pem"
+```
+
+Settings live in `~/findoc.env` on the server. After changing them, run `bash ~/findoc/deploy/setup.sh`. Set `ALLOW_SIGNUPS=false` there to close public registration. `deploy/backup.sh` and `deploy/restore.sh` save and restore the database and documents together.
+
+`backend/constraints.txt` pins every package in the tested server image. Keep `kombu` pinned while Celery 5.4 is in use: newer kombu cannot connect with the Redis client that Celery 5.4 requires, and uploads then stay queued.
+
 ## Author
 
 Angel Rathore — Computer Science undergraduate focused on AI, machine learning, and backend development.

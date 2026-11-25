@@ -32,6 +32,8 @@ SQLAlchemy==2.0.36
 alembic==1.14.0
 psycopg[binary]==3.2.3
 celery[redis]==5.4.0
+# Celery 5.4 requires redis-py below 6; kombu 5.7 refuses to connect with that.
+kombu==5.4.2
 PyJWT==2.15.1
 argon2-cffi==25.1.0
 requests==2.32.3

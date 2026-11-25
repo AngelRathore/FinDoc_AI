@@ -1,0 +1,54 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: FinDoc AI - a free https address from AWS (CloudFront) in front of the running server. Separate from the server's own stack, so creating or deleting it never touches the server or its data.
+
+Parameters:
+  OriginHost:
+    Type: String
+    Description: The address your site uses now, without https://, for example myfindoc.duckdns.org
+    AllowedPattern: '^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$'
+    ConstraintDescription: must be just the address, for example myfindoc.duckdns.org, with no https:// and no slash.
+
+Resources:
+  Site:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: FinDoc AI
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        Origins:
+          - Id: server
+            DomainName: !Ref OriginHost
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
+              # The first question after a restart loads the models, so allow longer
+              # than the 30 second default.
+              OriginReadTimeout: 60
+        DefaultCacheBehavior:
+          TargetOriginId: server
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+          Compress: true
+          # CachingDisabled: pages and API answers are private to each user.
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          # AllViewerExceptHostHeader: pass on logins (Authorization and cookies) but
+          # keep the server's own hostname, which Caddy needs to recognise the request.
+          OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+        CacheBehaviors:
+          # Built files have a fingerprint in their name, so they are safe to cache
+          # close to visitors.
+          - PathPattern: /assets/*
+            TargetOriginId: server
+            ViewerProtocolPolicy: redirect-to-https
+            Compress: true
+            # CachingOptimized
+            CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+
+Outputs:
+  SiteUrl:
+    Description: Your new address. Share this one.
+    Value: !Sub "https://${Site.DomainName}"

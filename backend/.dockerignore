@@ -1,0 +1,10 @@
+.env
+.env.*
+venv/
+.venv/
+**/__pycache__/
+*.pyc
+storage/
+celerybeat-schedule*
+Dockerfile
+.dockerignore
